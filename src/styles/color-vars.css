@@ -1,0 +1,37 @@
+:root {
+  /* vibrant youthful palette */
+  --ui-primary: #FFD700; /* bright yellow */
+  --ui-primary-contrast: #333333;
+  --ui-primary-strong: #FFC107;
+
+  --ui-secondary: #00CED1; /* bright cyan */
+  --ui-secondary-strong: #00B9BD;
+
+  --ui-accent: #FF4500; /* orange red */
+  --ui-accent-strong: #FF3B00;
+
+  --ui-coral: #FF6B6B; /* coral */
+  --ui-mint: #7BED9F;  /* mint */
+  --ui-sky: #87CEFA;   /* sky blue */
+
+  /* surfaces */
+  --ui-bg: #F5F5F5;
+  --ui-surface: #FFFFFF;
+  --ui-border: #e5e7eb;
+
+  /* functional palette (from guideline) */
+  --ui-danger: #E54041;
+  --ui-danger-bg: #FFE6E4;
+  --ui-warning: #F2731D;
+  --ui-warning-bg: #FEDDDE;
+  --ui-success: #12A271;
+  --ui-success-bg: #E4FFF6;
+  --ui-info: #3B82F6;
+  --ui-info-bg: #E9F1FF;
+
+  /* neutrals */
+  --ui-neutral-1: #F0F1F5;
+  --ui-neutral-2: #F4F6FC;
+  --ui-neutral-3: #E4E7ED;
+  --ui-overlay: #15182D;
+}

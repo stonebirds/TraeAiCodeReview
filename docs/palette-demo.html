@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>配色方案示例</title>
+  <style>
+    :root {
+      --ui-primary: #FFD700;
+      --ui-secondary: #00CED1;
+      --ui-accent: #FF4500;
+      --ui-coral: #FF6B6B;
+      --ui-mint: #7BED9F;
+      --ui-sky: #87CEFA;
+      --ui-bg: #F5F5F5;
+      --ui-surface: #FFFFFF;
+      --ui-border: #e5e7eb;
+    }
+    body { margin: 0; background: var(--ui-bg); color: #333; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+    .container { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .card { background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: 16px; padding: 16px; box-shadow: 0 6px 24px rgba(0,0,0,0.08); }
+    .swatch { height: 64px; border-radius: 12px; margin-bottom: 8px; }
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 12px; border: 1px solid var(--ui-border); font-weight: 600; cursor: pointer; }
+    .btn-primary { background: var(--ui-primary); color: #333; }
+    .btn-secondary { background: var(--ui-secondary); color: #fff; }
+    .btn-accent { background: var(--ui-accent); color: #fff; }
+    .title { font-size: 20px; font-weight: 700; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card" style="margin-bottom:16px;">
+      <div class="title">主色/辅助/强调</div>
+      <div class="grid">
+        <div class="card">
+          <div class="swatch" style="background:#FFD700"></div>
+          <div>#FFD700 柠檬黄（主色）</div>
+        </div>
+        <div class="card">
+          <div class="swatch" style="background:#00CED1"></div>
+          <div>#00CED1 亮青色（辅助）</div>
+        </div>
+        <div class="card">
+          <div class="swatch" style="background:#FF4500"></div>
+          <div>#FF4500 橙红色（强调）</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="title">按钮示例</div>
+      <div style="display:flex; gap:12px; flex-wrap:wrap;">
+        <button class="btn btn-primary">主色按钮</button>
+        <button class="btn btn-secondary">辅助色按钮</button>
+        <button class="btn btn-accent">强调色按钮</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="title">文本对比示例</div>
+      <p>正文文本（#333333）在浅背景（#F5F5F5）上呈现良好可读性。</p>
+      <p style="color:#111827">标题文本（#111827）在白色卡片上具有更高的对比度。</p>
+    </div>
+  </div>
+</body>
+</html>

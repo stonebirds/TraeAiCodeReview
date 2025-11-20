@@ -1,0 +1,36 @@
+stages:
+  - build
+  - deploy
+
+variables:
+  NODE_VERSION: '20'
+  BASE_PATH: '/TraeAiCodeReview/'
+
+cache:
+  paths:
+    - node_modules/
+
+build:
+  image: node:${NODE_VERSION}
+  stage: build
+  script:
+    - npm ci
+    - npm run build
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 week
+  only:
+    - main
+
+pages:
+  image: alpine:latest
+  stage: deploy
+  script:
+    - mkdir -p public
+    - cp -r dist/* public/
+  artifacts:
+    paths:
+      - public
+  only:
+    - main
