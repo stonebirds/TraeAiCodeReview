@@ -84,12 +84,12 @@ export class AIService {
   }
 
   private getProviderConfig(modelId: string) {
-    const map: Record<string, { type: 'openai' | 'deepseek' | 'anthropic' | 'moonshot' | 'doubao', url: string, headerAuth: string, minIntervalMs: number }> = {
-      'gpt-4': { type: 'openai', url: 'https://api.openai.com/v1/chat/completions', headerAuth: 'Authorization', minIntervalMs: 1000 },
-      'deepseek-chat': { type: 'deepseek', url: 'https://api.deepseek.com/v1/chat/completions', headerAuth: 'Authorization', minIntervalMs: 1000 },
-      'claude-3-sonnet': { type: 'anthropic', url: 'https://api.anthropic.com/v1/messages', headerAuth: 'x-api-key', minIntervalMs: 1000 },
-      'kimi-k2': { type: 'moonshot', url: 'https://api.moonshot.cn/v1/chat/completions', headerAuth: 'Authorization', minIntervalMs: 1000 },
-      'doubao-pro': { type: 'doubao', url: 'https://api.doubao.com/v1/chat/completions', headerAuth: 'Authorization', minIntervalMs: 1000 }
+    const map: Record<string, { type: 'openai' | 'deepseek' | 'anthropic' | 'moonshot' | 'doubao', urls: string[], headerAuth: string, minIntervalMs: number, corsSupported?: boolean }> = {
+      'gpt-4': { type: 'openai', urls: ['https://api.openai.com/v1/chat/completions'], headerAuth: 'Authorization', minIntervalMs: 1000, corsSupported: false },
+      'deepseek-chat': { type: 'deepseek', urls: ['https://api.deepseek.com/v1/chat/completions'], headerAuth: 'Authorization', minIntervalMs: 1000, corsSupported: false },
+      'claude-3-sonnet': { type: 'anthropic', urls: ['https://api.anthropic.com/v1/messages'], headerAuth: 'x-api-key', minIntervalMs: 1000, corsSupported: false },
+      'kimi-k2': { type: 'moonshot', urls: ['https://api.moonshot.cn/v1/chat/completions','https://api.moonshot.ai/v1/chat/completions'], headerAuth: 'Authorization', minIntervalMs: 1000, corsSupported: false },
+      'doubao-pro': { type: 'doubao', urls: ['https://api.doubao.com/v1/chat/completions'], headerAuth: 'Authorization', minIntervalMs: 1000, corsSupported: false }
     };
     return map[modelId];
   }
@@ -217,6 +217,9 @@ export class AIService {
       let responseText = '';
       if (!cfg) throw new Error('未配置的模型提供方');
 
+      // 提示：多数大模型供应商不支持浏览器直接跨域调用
+      if (cfg.corsSupported === false && log) log('提示', '该供应商可能不支持浏览器直连，建议使用服务器代理');
+
       if (cfg.type === 'openai' || cfg.type === 'deepseek' || cfg.type === 'moonshot' || cfg.type === 'doubao') {
         const body = {
           model: this.model.id,
@@ -227,17 +230,36 @@ export class AIService {
           temperature: 0,
           max_tokens: 2048
         };
-        if (log) log('AI请求发送', JSON.stringify({ url: cfg.url, body: { ...body, messages: [{ role: 'system' }, { role: 'user', content: '<已省略>' }] } }));
-        const res = await fetch(cfg.url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            [cfg.headerAuth]: `Bearer ${this.apiKey}`
-          },
-          body: JSON.stringify(body)
-        });
-        const json = await res.json();
-        responseText = json?.choices?.[0]?.message?.content || json?.data || JSON.stringify(json);
+        let lastErr: any = null;
+        for (const url of cfg.urls) {
+          try {
+            if (log) log('AI请求发送', JSON.stringify({ url, body: { ...body, messages: [{ role: 'system' }, { role: 'user', content: '<已省略>' }] } }));
+            const res = await fetch(url, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                [cfg.headerAuth]: `Bearer ${this.apiKey}`
+              },
+              body: JSON.stringify(body)
+            });
+            if (!res.ok) {
+              const text = await res.text();
+              if (log) log('AI请求失败', `status ${res.status} · ${text.slice(0,200)}`);
+              // Moonshot 404 兼容：尝试下一个域名
+              lastErr = new Error(`HTTP ${res.status}`);
+              continue;
+            }
+            const json = await res.json();
+            responseText = json?.choices?.[0]?.message?.content || json?.data || JSON.stringify(json);
+            lastErr = null;
+            break;
+          } catch (e) {
+            lastErr = e;
+            if (log) log('AI请求异常', (e as Error).message);
+            continue;
+          }
+        }
+        if (lastErr) throw lastErr;
       } else if (cfg.type === 'anthropic') {
         const body = {
           model: this.model.id,
@@ -246,8 +268,9 @@ export class AIService {
             { role: 'user', content: prompt }
           ]
         };
-        if (log) log('AI请求发送', JSON.stringify({ url: cfg.url, body: { ...body, messages: [{ role: 'user', content: '<已省略>' }] } }));
-        const res = await fetch(cfg.url, {
+        const url = cfg.urls[0];
+        if (log) log('AI请求发送', JSON.stringify({ url, body: { ...body, messages: [{ role: 'user', content: '<已省略>' }] } }));
+        const res = await fetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
