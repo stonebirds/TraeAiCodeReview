@@ -28,8 +28,12 @@ export class AIService {
   private static instance: AIService;
   private apiKey: string = '';
   private model: AIModel | null = null;
+  private connectionMode: 'auto' | 'direct' | 'proxy' = 'auto';
+  private proxyUrl: string = '';
   private requestCountByModel: Record<string, number> = {};
   private lastRequestAtByModel: Record<string, number> = {};
+  private warnedProviders: Set<string> = new Set();
+  private stats: { success: number; fail: number; lastError?: string } = { success: 0, fail: 0 };
 
   public static getInstance(): AIService {
     if (!AIService.instance) {
@@ -81,6 +85,18 @@ export class AIService {
         supported: true
       }
     ];
+  }
+
+  setConnectionMode(mode: 'auto' | 'direct' | 'proxy'): void {
+    this.connectionMode = mode;
+  }
+
+  setProxyUrl(url: string): void {
+    this.proxyUrl = url.trim();
+  }
+
+  getStats(): { success: number; fail: number; lastError?: string } {
+    return { ...this.stats };
   }
 
   private getProviderConfig(modelId: string) {
@@ -217,8 +233,11 @@ export class AIService {
       let responseText = '';
       if (!cfg) throw new Error('未配置的模型提供方');
 
-      // 提示：多数大模型供应商不支持浏览器直接跨域调用
-      if (cfg.corsSupported === false && log) log('提示', '该供应商可能不支持浏览器直连，建议使用服务器代理');
+      // 提示（去重）：多数大模型供应商不支持浏览器直接跨域调用
+      if (cfg.corsSupported === false && !this.warnedProviders.has(modelId)) {
+        this.warnedProviders.add(modelId);
+        if (log) log('提示', '该供应商可能不支持浏览器直连，建议使用服务器代理');
+      }
 
       if (cfg.type === 'openai' || cfg.type === 'deepseek' || cfg.type === 'moonshot' || cfg.type === 'doubao') {
         const body = {
@@ -230,36 +249,71 @@ export class AIService {
           temperature: 0,
           max_tokens: 2048
         };
-        let lastErr: any = null;
-        for (const url of cfg.urls) {
-          try {
-            if (log) log('AI请求发送', JSON.stringify({ url, body: { ...body, messages: [{ role: 'system' }, { role: 'user', content: '<已省略>' }] } }));
-            const res = await fetch(url, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                [cfg.headerAuth]: `Bearer ${this.apiKey}`
-              },
-              body: JSON.stringify(body)
-            });
-            if (!res.ok) {
-              const text = await res.text();
-              if (log) log('AI请求失败', `status ${res.status} · ${text.slice(0,200)}`);
-              // Moonshot 404 兼容：尝试下一个域名
-              lastErr = new Error(`HTTP ${res.status}`);
+        const doDirect = async () => {
+          let lastErr: any = null;
+          for (const url of cfg.urls) {
+            try {
+              if (log) log('AI请求发送', JSON.stringify({ url, body: { ...body, messages: [{ role: 'system' }, { role: 'user', content: '<已省略>' }] } }));
+              const res = await fetch(url, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  [cfg.headerAuth]: `Bearer ${this.apiKey}`
+                },
+                body: JSON.stringify(body)
+              });
+              if (!res.ok) {
+                const text = await res.text();
+                if (log) log('AI请求失败', `status ${res.status} · ${text.slice(0,200)}`);
+                lastErr = new Error(`HTTP ${res.status}`);
+                continue;
+              }
+              const json = await res.json();
+              return json?.choices?.[0]?.message?.content || json?.data || JSON.stringify(json);
+            } catch (e) {
+              lastErr = e;
+              if (log) log('AI请求异常', (e as Error).message);
               continue;
             }
-            const json = await res.json();
-            responseText = json?.choices?.[0]?.message?.content || json?.data || JSON.stringify(json);
-            lastErr = null;
-            break;
+          }
+          if (lastErr) throw lastErr;
+          return '';
+        };
+
+        const doProxy = async () => {
+          if (!this.proxyUrl) throw new Error('未配置代理地址');
+          const proxyEndpoint = `${this.proxyUrl.replace(/\/$/, '')}/v1/chat/completions`;
+          const proxyBody: any = { ...body, api_key: this.apiKey };
+          if (log) log('代理请求发送', proxyEndpoint);
+          const res = await fetch(proxyEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(proxyBody)
+          });
+          if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`代理HTTP ${res.status} · ${text.slice(0,200)}`);
+          }
+          const json = await res.json();
+          return json?.choices?.[0]?.message?.content || json?.data || JSON.stringify(json);
+        };
+
+        if (this.connectionMode === 'direct') {
+          responseText = await doDirect();
+        } else if (this.connectionMode === 'proxy') {
+          responseText = await doProxy();
+        } else {
+          try {
+            responseText = await doDirect();
           } catch (e) {
-            lastErr = e;
-            if (log) log('AI请求异常', (e as Error).message);
-            continue;
+            if (this.proxyUrl) {
+              if (log) log('自动切换到代理', (e as Error).message);
+              responseText = await doProxy();
+            } else {
+              throw e;
+            }
           }
         }
-        if (lastErr) throw lastErr;
       } else if (cfg.type === 'anthropic') {
         const body = {
           model: this.model.id,
@@ -287,11 +341,14 @@ export class AIService {
       if (log) log('响应内容', responseText.slice(0, 1000));
 
       const issues = this.normalizeIssuesFromText(responseText, filePath, code);
+      this.stats.success++;
       const summary = `审查完成，发现${issues.length}个问题`;
       if (log) log('AI结果生成', summary);
       return { file: filePath, issues, summary };
     } catch (err) {
       if (log) log('AI请求失败', (err as Error).message);
+      this.stats.fail++;
+      this.stats.lastError = (err as Error).message;
       const failIssue: CodeIssue = {
         line: 1,
         type: 'error',

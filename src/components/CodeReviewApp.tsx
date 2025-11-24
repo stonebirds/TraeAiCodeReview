@@ -22,6 +22,8 @@ const CodeReviewApp: React.FC = () => {
   const [showApiKey, setShowApiKey] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'success' | 'failed'>('idle');
+  const [connectionMode, setConnectionMode] = useState<'auto' | 'direct' | 'proxy'>('auto');
+  const [proxyUrl, setProxyUrl] = useState('');
 
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [standardsContent, setStandardsContent] = useState('');
@@ -89,6 +91,10 @@ const CodeReviewApp: React.FC = () => {
     reviewService.onLog((level, message, details) => {
       addLog(message, level, details);
     });
+
+    // 默认连接模式
+    aiService.setConnectionMode(connectionMode);
+    aiService.setProxyUrl(proxyUrl);
   }, []);
 
   // 添加日志
@@ -506,6 +512,33 @@ const CodeReviewApp: React.FC = () => {
                     {connectionStatus === 'failed' && (
                       <p className="text-sm text-red-600 mt-1">✗ API连接失败，请检查密钥</p>
                     )}
+                    {/* 连接模式与代理地址 */}
+                    <div className="mt-4 flex space-x-2">
+                      <select
+                        value={connectionMode}
+                        onChange={(e) => {
+                          const mode = e.target.value as 'auto' | 'direct' | 'proxy';
+                          setConnectionMode(mode);
+                          aiService.setConnectionMode(mode);
+                          addLog(`连接模式: ${mode}`, 'info');
+                        }}
+                        className="px-3 py-2 border border-ui rounded-md focus:outline-none focus:ring-2 focus:ring-ui text-gray-700"
+                      >
+                        <option value="auto">自动（先直连，失败走代理）</option>
+                        <option value="direct">直连</option>
+                        <option value="proxy">代理</option>
+                      </select>
+                      <input
+                        type="text"
+                        value={proxyUrl}
+                        onChange={(e) => {
+                          setProxyUrl(e.target.value);
+                          aiService.setProxyUrl(e.target.value);
+                        }}
+                        placeholder="代理地址，如 https://proxy.example.com"
+                        className="flex-1 px-3 py-2 border border-ui rounded-md focus:outline-none focus:ring-2 focus:ring-ui text-gray-700"
+                      />
+                    </div>
                   </div>
                 )}
               </div>
