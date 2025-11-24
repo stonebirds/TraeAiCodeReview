@@ -36,17 +36,16 @@ export class GitService {
     this.localStoragePath = path;
   }
 
-  // 验证Git仓库地址
+  // 验证Git仓库地址（支持含/不含 .git）
   validateGitUrl(url: string): boolean {
     const patterns = [
-      /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\.git$/,
-      /^https:\/\/gitlab\.com\/[\w.-]+\/[\w.-]+\.git$/,
+      /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+(\.git)?$/,
+      /^https:\/\/gitlab\.com\/[\w.-]+\/[\w.-]+(\.git)?$/,
       /^git@github\.com:[\w.-]+\/[\w.-]+\.git$/,
       /^git@gitlab\.com:[\w.-]+\/[\w.-]+\.git$/,
-      /^https:\/\/gitee\.com\/[\w.-]+\/[\w.-]+\.git$/,
+      /^https:\/\/gitee\.com\/[\w.-]+\/[\w.-]+(\.git)?$/,
       /^git@gitee\.com:[\w.-]+\/[\w.-]+\.git$/
     ];
-    
     return patterns.some(pattern => pattern.test(url));
   }
 
@@ -66,22 +65,31 @@ export class GitService {
       const [, owner, repo] = match;
       const repoName = repo.replace('.git', '');
       
-      // 获取分支信息
-      const branchesResponse = await fetch(`https://api.github.com/repos/${owner}/${repoName}/branches`);
-      if (!branchesResponse.ok) {
-        throw new Error('获取分支信息失败');
+      // 分页获取全部分支（每页最多100）
+      const branches: GitBranch[] = [];
+      let page = 1;
+      while (true) {
+        const resp = await fetch(`https://api.github.com/repos/${owner}/${repoName}/branches?per_page=100&page=${page}`, {
+          headers: { 'Accept': 'application/vnd.github+json' }
+        });
+        if (!resp.ok) throw new Error('获取分支信息失败');
+        const data = await resp.json();
+        if (!Array.isArray(data) || data.length === 0) break;
+        for (const branch of data) {
+          branches.push({
+            name: branch.name,
+            commit: (branch.commit?.sha || '').substring(0, 7),
+            protected: !!branch.protected
+          });
+        }
+        if (data.length < 100) break;
+        page++;
       }
-      
-      const branchesData = await branchesResponse.json();
-      
+
       return {
         url,
-        branches: branchesData.map((branch: any) => ({
-          name: branch.name,
-          commit: branch.commit.sha.substring(0, 7),
-          protected: branch.protected || false
-        })),
-        currentBranch: branchesData[0]?.name || 'main'
+        branches,
+        currentBranch: branches[0]?.name || 'main'
       };
     } catch (error) {
       console.error('获取仓库信息失败:', error);
